@@ -1,0 +1,120 @@
+#!/bin/bash
+#
+# loop ctl
+#
+
+# python2
+run="/usr/bin/python"
+
+
+pro="/usr/local/loop/bin/loop.py"
+cfg="/usr/local/loop/etc/loop.conf"
+
+
+if [ ! -f $cfg ]; then
+    echo "Configure file '$cfg' is not exists."
+    exit 0
+fi
+
+function get_element() {
+echo $($run -c "
+from ConfigParser import ConfigParser
+parser = ConfigParser()
+parser.read('$cfg')
+print(parser.get('$1', '$2'))
+" 2>/dev/null)
+}
+
+function check_run() {
+    pid=$(cat $(get_element "global" "pid_file") 2>/dev/null)
+    ps -p $pid >/dev/null 2>&1
+    if [ $? -eq 0 ]; then
+        echo $pid
+    else
+        echo -1
+    fi
+}
+
+function start_s() {
+    pid=$(check_run)
+    if [ $pid -eq -1 ]; then
+        $run $pro &
+        sleep 0.5
+        pid=$(check_run)
+        if [ $pid -ne -1 ]; then
+            echo "loop is start, pid is $pid"
+        else
+            echo "loop is start error."
+        fi
+    fi
+}
+
+function stop_s() {
+    pid=$(check_run)
+    if [ $pid -ne -1 ]; then
+        kill -9 $pid
+        echo "loop is stop, pid is $pid"
+        timeout="1 1 1 1 1 1"
+        for i in $timeout
+        do
+            [ $(check_run) -eq -1 ] && break
+            sleep $i
+        done
+    fi
+}
+
+function status_s() {
+    pid=$(check_run)
+    if [ $pid -ne -1 ]; then
+        echo "loop is running, pid is $pid"
+    else
+        echo "loop is stopd."
+    fi
+}
+
+function change() {
+    folder=$(get_element "$1" "folder")
+    if [ "x" != "x$folder" ]; then
+        cd $folder && touch O_._O && unlink O_._O
+    else
+        echo "unchanged."
+    fi
+}
+
+
+case "$1" in
+    "start")
+        start_s
+        ;;
+  
+    "stop")
+        stop_s
+        ;;
+
+    "status")
+        status_s
+        ;;
+
+    "restart")
+        stop_s && start_s
+        ;;
+
+    "list")
+        cat $cfg
+        ;;
+
+    "change")
+        section=$2
+        if [ "x" == "x$section" ]; then
+            echo "Usage: $0 change <section name>"
+            exit 0
+        fi
+        change $section
+        ;;
+
+    *)
+        echo "Usage: $0 {start|stop|status|restart|list|change <section name>}"
+        ;; 
+esac
+
+
